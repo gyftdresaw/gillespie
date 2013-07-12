@@ -21,8 +21,21 @@ class Gillespie:
     def get_rates(self,curr):
         return np.array([f(curr) for f in self.rates])
 
+    # checks if data satisfies fpt_thresh
+    # if item in fpt_thresh is None, it is treated
+    # as if there's no condition on that species
+    # otherwise we check for equality
+    def fpt_satisfied(self,fpt_thresh,data):
+        if fpt_thresh is None:
+            return True
+        checks = [fpt_thresh[i] == data[i] for i in xrange(len(data)) if not fpt_thresh[i] is None]
+        return reduce(lambda x,y: x and y, checks)
+
     # desired time t, number of trials trials
-    def simulate(self,t,trials):
+    # for calculating first passage times:
+    #   fpt_thresh is a list of conditions on each species
+    #   that need to reached before each run terminates
+    def simulate(self,t,trials,fpt_thresh=None):
         self.trials = trials
         self.data_points = [[self.IC] for i in xrange(trials)]
         self.time_points = [[0.0] for i in xrange(trials)]
@@ -30,7 +43,8 @@ class Gillespie:
         for i in xrange(trials):
             time = 0.0
             data = self.IC
-            while time < t:
+            fpt_sat = self.fpt_satisfied(fpt_thresh,data)
+            while time < t or not fpt_sat:
                 rates = self.get_rates(data)
                 total_rate = reduce(lambda x,y: x+y,rates)
                 # input to exponential is scale = 1/rate
@@ -46,6 +60,11 @@ class Gillespie:
                 # print (time_step,choice,norm_rates,data,time)
                 self.data_points[i].append(data)
                 # print self.data_points
+                
+                # if our fpt conditions have not yet been satisfied
+                # check again with updated data
+                if not fpt_sat:
+                    fpt_sat = self.fpt_satisfied(fpt_thresh,data)
         
     # get all data from simulations at time t
     def get_data(self,t):
@@ -70,73 +89,15 @@ class Gillespie:
         # mvals is (times x num_species)
         return mvals
 
-# quick test
-def birth(d):
-    x = d[:] # make a copy because weird stuff is happening
-    x[0] += 1
-    return x
-
-def birth_rate(d,kb):
-    return kb
-
-def death(d):
-    x = d[:]
-    if x[0] == 0:
-        return x
-    else:
-        x[0] -= 1
-        return x
-
-def death_rate(d,kd):
-    return kd * d[0]
-
-G = Gillespie([0])
-KB = 2.0
-KD = 0.5
-T = 1000
-G.add_reaction(birth,lambda x: birth_rate(x,KB))
-G.add_reaction(death,lambda x: death_rate(x,KD))
-G.simulate(10,T)
-
-# a few plots
-# distribution at a few times
-times = np.linspace(0.1,3,7)
-for_hist = np.empty((T,len(times)))
-for i in xrange(len(times)):
-    results = G.get_data(times[i])
-    for_hist[:,i] = results[:,0]
-
-plt.figure()
-n,bins,patches = plt.hist(for_hist,bins=range(10),align='left',normed=True)
-# add expected poisson distribution lines
-# disregard time 0, distribution at that time doesn't make sense
-poiss_lines = np.empty((len(bins),len(times)))
-for i in xrange(len(times)):
-    mu_expected = (KB/KD) * (1.0 - np.exp(-KD * times[i]))
-    poiss_lines[:,i] = poisson.pmf(bins,mu_expected)
-plt.plot(bins,poiss_lines)
-plt.legend(times)
-plt.title('distribution in time')
-plt.show()
-
-# plot mean in time
-t = np.linspace(0,10,100)
-mean_data = G.get_moment(t,1)
-plt.figure()
-plt.plot(t,mean_data)
-mean_exp = (KB/KD) * (1.0 - np.exp(-KD * t))
-plt.plot(t,mean_exp,'--')
-plt.title('mean in time')
-plt.show()
-
-# plot variance in time
-var_data = G.get_moment(t,2) - (mean_data * mean_data)
-plt.figure()
-plt.plot(t,var_data)
-plt.plot(t,mean_exp,'--')
-plt.title('var in time')
-plt.show()
-
-
-
+    # for each trial return the first time
+    # when fpt_thresh conditions are met
+    def get_fpt(self,fpt_thresh):
+        fptimes = np.empty(self.trials)
+        for i in xrange(self.trials):
+            j = 0
+            while not self.fpt_satisfied(fpt_thresh,self.data_points[i][j]):
+                j += 1
+            fptimes[i] = self.time_points[i][j]
+        
+        return fptimes
 
