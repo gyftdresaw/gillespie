@@ -19,7 +19,7 @@ def birth_rate(d,kb,i):
     return kb[i] * d[i-1]
 
 N = 2
-KB = np.array([1.0,0.5])
+KB = np.array([2.0,0.5])
 T = 1000
 sim_time = 3.0
 G = Gillespie(np.ones(N))
@@ -33,7 +33,9 @@ for i in xrange(N):
     b,brate = birth_factory(KB,i)
     G.add_reaction(b,brate)
 
+print 'starting simulation'
 G.simulate(sim_time,T)
+print 'simulation done'
 
 # a few plots
 # distribution at a few times
@@ -57,7 +59,7 @@ mean_exp = np.empty((len(t),2))
 A = (1.0/2.0)*(1.0 + (KB[0]/gmean(KB)))
 B = 1.0 - A
 mean_exp[:,0] = A * np.exp(gmean(KB)*t) + B * np.exp(-gmean(KB)*t)
-mean_exp[:,1] = gmean(KB) * (A * np.exp(gmean(KB)*t) - B * np.exp(-gmean(KB)*t))
+mean_exp[:,1] = (gmean(KB)/KB[0]) * (A * np.exp(gmean(KB)*t) - B * np.exp(-gmean(KB)*t))
 plt.plot(t,mean_exp,'--')
 plt.title('mean in time')
 plt.show()
